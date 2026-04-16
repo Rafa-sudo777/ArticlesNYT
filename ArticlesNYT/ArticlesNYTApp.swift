@@ -12,7 +12,7 @@ import SwiftData
 struct ArticlesNYTApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            ArticleItem.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,7 +25,7 @@ struct ArticlesNYTApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            DaysSelectorView(days: "")
         }
         .modelContainer(sharedModelContainer)
     }
