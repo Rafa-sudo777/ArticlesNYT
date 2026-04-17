@@ -11,6 +11,21 @@ import SwiftData
 @testable import ArticlesNYT
 
 struct ArticlesNYTTests {
+    @Test func isValidDayAcceptsSupportedValues() {
+        #expect("1".isValidDay)
+        #expect("7".isValidDay)
+        #expect("30".isValidDay)
+        #expect(" 30 ".isValidDay)
+    }
+
+    @Test func isValidDayRejectsUnsupportedValues() {
+        #expect("".isValidDay == false)
+        #expect("0".isValidDay == false)
+        #expect("15".isValidDay == false)
+        #expect("31".isValidDay == false)
+        #expect("one".isValidDay == false)
+    }
+
     @MainActor
     @Test func getArticlesUsesCachedArticlesWithoutCallingNetwork() async throws {
         let modelContext = try makeInMemoryModelContext()
@@ -63,7 +78,7 @@ struct ArticlesNYTTests {
     }
 
     @MainActor
-    @Test func getArticlesShowsErrorWhenNetworkFails() async throws {
+    @Test func getArticlesShowsInternetErrorWhenNetworkFails() async throws {
         let modelContext = try makeInMemoryModelContext()
         let networkManager = MockNetworkManager(result: .failure(URLError(.notConnectedToInternet)))
         let viewModel = ArticlesViewModel(networkManager: networkManager)
@@ -74,7 +89,39 @@ struct ArticlesNYTTests {
         
         #expect(networkManager.callCount == 1)
         #expect(viewModel.isLoading == false)
-        #expect(viewModel.showErrorMessage == "No fue posible obtener los articulos.")
+        #expect(viewModel.showErrorMessage == NetworkError.noInternetConnection.errorDescription)
+        #expect(savedArticles.isEmpty)
+    }
+
+    @MainActor
+    @Test func getArticlesShowsTimeoutErrorWhenServerDoesNotRespond() async throws {
+        let modelContext = try makeInMemoryModelContext()
+        let networkManager = MockNetworkManager(result: .failure(URLError(.timedOut)))
+        let viewModel = ArticlesViewModel(networkManager: networkManager)
+
+        await viewModel.getArticles(in: "30", modelContext: modelContext)
+
+        let savedArticles = try fetchArticles(in: "30", modelContext: modelContext)
+
+        #expect(networkManager.callCount == 1)
+        #expect(viewModel.isLoading == false)
+        #expect(viewModel.showErrorMessage == NetworkError.requestTimedOut.errorDescription)
+        #expect(savedArticles.isEmpty)
+    }
+
+    @MainActor
+    @Test func getArticlesRejectsInvalidDayBeforeCallingNetwork() async throws {
+        let modelContext = try makeInMemoryModelContext()
+        let networkManager = MockNetworkManager(result: .success([.fixture(title: "Unused")]))
+        let viewModel = ArticlesViewModel(networkManager: networkManager)
+
+        await viewModel.getArticles(in: "5", modelContext: modelContext)
+
+        let savedArticles = try fetchArticles(in: "5", modelContext: modelContext)
+
+        #expect(networkManager.callCount == 0)
+        #expect(viewModel.isLoading == false)
+        #expect(viewModel.showErrorMessage == NetworkError.invalidDay.errorDescription)
         #expect(savedArticles.isEmpty)
     }
 }

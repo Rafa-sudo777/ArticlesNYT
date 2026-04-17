@@ -14,18 +14,25 @@ final class ArticlesViewModel: ObservableObject {
     
     @MainActor
     func getArticles(in day: String, modelContext: ModelContext) async {
-            let cachedArticles = fetchArticles(in: day, modelContext: modelContext)
+            guard day.isValidDay else {
+                showErrorMessage = NetworkError.invalidDay.errorDescription
+                isLoading = false
+                return
+            }
+
+            let normalizedDay = day.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cachedArticles = fetchArticles(in: normalizedDay, modelContext: modelContext)
             guard cachedArticles.isEmpty else {
                 isLoading = false
                 return
             }
 
             do {
-                let articles = try await networkManager.getArticles(in: day)
-                let articleItems = articlesAdapter(articles: articles, day: day)
+                let articles = try await networkManager.getArticles(in: normalizedDay)
+                let articleItems = articlesAdapter(articles: articles, day: normalizedDay)
                 saveArticles(articleItems, modelContext: modelContext)
             } catch {
-                showErrorMessage = "No fue posible obtener los articulos."
+                showErrorMessage = resolveErrorMessage(from: error)
             }
 
             isLoading = false
@@ -72,5 +79,27 @@ final class ArticlesViewModel: ObservableObject {
         } catch {
             showErrorMessage = "No fue posible guardar los articulos para uso offline."
         }
+    }
+
+    private func resolveErrorMessage(from error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return NetworkError.noInternetConnection.errorDescription ?? NetworkError.unexpected.errorDescription ?? ""
+            case .timedOut:
+                return NetworkError.requestTimedOut.errorDescription ?? NetworkError.unexpected.errorDescription ?? ""
+            case .badServerResponse, .cannotFindHost, .cannotConnectToHost:
+                return NetworkError.serverUnavailable.errorDescription ?? NetworkError.unexpected.errorDescription ?? ""
+            default:
+                return NetworkError.unexpected.errorDescription ?? ""
+            }
+        }
+
+        if let localizedError = error as? LocalizedError,
+           let description = localizedError.errorDescription {
+            return description
+        }
+
+        return "Ocurrio un error inesperado al obtener los articulos."
     }
 }
